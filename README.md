@@ -1,6 +1,6 @@
 # Net Worth Tracking Application
 
-A comprehensive personal finance application for tracking assets, liabilities, transactions, and financial goals with real-time net worth calculation and analytics.
+A comprehensive personal finance application for tracking assets, liabilities, transactions, and financial goals with real-time net worth calculation and analytics.12
 
 ## Features
 
