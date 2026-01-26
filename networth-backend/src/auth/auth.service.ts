@@ -236,4 +236,55 @@ export class AuthService {
 
     return newUser;
   }
+
+  async signup(signupDto: any) {
+    console.log(`[AuthService] Signup attempt for: ${signupDto.email}`);
+
+    // Check if user already exists
+    const existingUser = await this.prisma.user.findFirst({
+      where: { email: signupDto.email }
+    });
+
+    if (existingUser) {
+      console.log(`[AuthService] Signup failed - email already exists: ${signupDto.email}`);
+      throw new BadRequestException('Email already registered');
+    }
+
+    // Hash password
+    const passwordHash = await argon2.hash(signupDto.password);
+
+    // Create new user
+    const newUser = await this.prisma.user.create({
+      data: {
+        email: signupDto.email,
+        passwordHash,
+        firstName: signupDto.firstName || null,
+        lastName: signupDto.lastName || null,
+        role: 'USER',
+        currency: 'AED', // Default currency
+        isActive: true,
+        forceChangePassword: false,
+      },
+    });
+
+    console.log(`[AuthService] Signup successful for: ${newUser.id}`);
+
+    // Generate JWT token
+    const payload = { email: newUser.email, sub: newUser.id, role: newUser.role };
+    const token = this.jwtService.sign(payload);
+
+    const responseUser = {
+      id: newUser.id,
+      email: newUser.email,
+      name: newUser.firstName || 'User',
+      role: newUser.role,
+      currency: newUser.currency,
+      forceChangePassword: newUser.forceChangePassword,
+    };
+
+    return {
+      access_token: token,
+      user: responseUser,
+    };
+  }
 }

@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport'; import { LoginDto } from './dto/login.dto';
+import { SignupDto } from './dto/signup.dto';
 import { ChangePasswordDto, MagicLoginDto } from './dto/password-reset.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 
@@ -23,6 +24,12 @@ export class AuthController {
   @Post('login')
   signIn(@Body() signInDto: LoginDto) {
     return this.authService.login(signInDto);
+  }
+
+  @HttpCode(HttpStatus.CREATED)
+  @Post('signup')
+  signUp(@Body() signupDto: SignupDto) {
+    return this.authService.signup(signupDto);
   }
 
   @HttpCode(HttpStatus.OK)
