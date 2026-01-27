@@ -100,6 +100,7 @@ function CallbackContent() {
                         email: decoded.email,
                         name: decoded.name || 'User',
                         role: decoded.role,
+                        moduleVisibility: {}, // Default empty - user will get their saved settings on next profile fetch
                     };
 
                     console.log('[OAuth Callback] Using decoded token for user data');
