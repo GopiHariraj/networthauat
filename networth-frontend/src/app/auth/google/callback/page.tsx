@@ -12,59 +12,107 @@ function CallbackContent() {
 
     useEffect(() => {
         const token = searchParams.get('token');
-        if (token) {
-            // Decode token to get user info if needed, or backend can return user in query params too
-            // For now, we trust the token and let auth-context fetch profile or decode it
-            // Actually, context.login expects (token, user).
-            // We might need to fetch user profile using the token, OR decode it.
-            // Simplified: login with token, and let context decode payload.
 
-            // To properly mock the user object without another call, we can decode the token
+        if (!token) {
+            console.error('[OAuth Callback] No token found in URL');
+            router.push('/login?error=no_token');
+            return;
+        }
+
+        console.log('[OAuth Callback] Token received, processing authentication...');
+
+        // Helper to perform login and redirect with iOS-safe storage
+        const performLogin = async (userToken: string, userData: any) => {
+            console.log('[OAuth Callback] Performing login with user:', userData);
+
+            // Call login with skipRedirect=true to prevent automatic navigation
+            login(userToken, userData, true);
+
+            // iOS Safari fix: Wait for localStorage to complete before redirecting
+            // Use setTimeout to ensure storage operations are flushed
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Verify storage completed (especially important on iOS)
+            const storedToken = localStorage.getItem('token');
+            const storedUser = localStorage.getItem('user');
+
+            if (!storedToken || !storedUser) {
+                console.error('[OAuth Callback] Storage verification failed, retrying...');
+                // Retry storage
+                localStorage.setItem('token', userToken);
+                localStorage.setItem('user', JSON.stringify(userData));
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+            console.log('[OAuth Callback] Storage verified, redirecting to dashboard...');
+
+            // Use window.location.replace for a hard redirect (better for iOS)
+            window.location.replace('/');
+        };
+
+        // Helper to decode token payload
+        const decodeToken = (token: string) => {
             try {
-                // Fetch full user profile to ensure we have latest settings (moduleVisibility, etc)
-                // We must pass the token explicitly since it's not in localStorage yet
-                import('../../../../lib/api/client').then(async ({ default: client }) => {
-                    try {
-                        const response = await client.get('/users/me/profile', {
-                            headers: { Authorization: `Bearer ${token}` }
-                        });
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(
+                    window.atob(base64)
+                        .split('')
+                        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                        .join('')
+                );
+                return JSON.parse(jsonPayload);
+            } catch (e) {
+                console.error('[OAuth Callback] Failed to decode token:', e);
+                throw new Error('Invalid token format');
+            }
+        };
 
-                        const fullUser = response.data;
-                        console.log('Fetched full user profile:', fullUser);
+        // Main authentication flow
+        const authenticateUser = async () => {
+            try {
+                // Import API client dynamically
+                const { default: client } = await import('../../../../lib/api/client');
 
-                        // Pass true to skip default router.push and force hard redirect below
-                        login(token, fullUser, true);
-
-                        // Force hard reload to clear any router/state issues
-                        window.location.href = '/';
-                    } catch (err) {
-                        console.error('Failed to fetch user profile, falling back to token payload', err);
-                        // Fallback logic
-                        const base64Url = token.split('.')[1];
-                        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function (c) {
-                            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                        }).join(''));
-                        const decoded = JSON.parse(jsonPayload);
-
-                        const user = {
-                            id: decoded.sub,
-                            email: decoded.email,
-                            name: decoded.name || 'User',
-                            role: decoded.role,
-                        };
-                        login(token, user, true);
-                        window.location.href = '/';
-                    }
+                // Create timeout promise (5 seconds)
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Profile fetch timeout')), 5000);
                 });
 
-            } catch (e) {
-                console.error('Failed to process login', e);
-                router.push('/login?error=auth_failed');
+                // Fetch user profile with timeout
+                const profilePromise = client.get('/users/me/profile', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+
+                try {
+                    const response = await Promise.race([profilePromise, timeoutPromise]) as any;
+                    const fullUser = response.data;
+
+                    console.log('[OAuth Callback] Successfully fetched user profile');
+                    await performLogin(token, fullUser);
+                } catch (profileError: any) {
+                    console.warn('[OAuth Callback] Profile fetch failed, using token fallback:', profileError.message);
+
+                    // Fallback: decode token to get user info
+                    const decoded = decodeToken(token);
+                    const user = {
+                        id: decoded.sub,
+                        email: decoded.email,
+                        name: decoded.name || 'User',
+                        role: decoded.role,
+                    };
+
+                    console.log('[OAuth Callback] Using decoded token for user data');
+                    await performLogin(token, user);
+                }
+            } catch (error: any) {
+                console.error('[OAuth Callback] Authentication failed:', error);
+                router.push(`/login?error=auth_failed&message=${encodeURIComponent(error.message || 'Unknown error')}`);
             }
-        } else {
-            router.push('/login?error=no_token');
-        }
+        };
+
+        // Execute authentication flow
+        authenticateUser();
     }, [searchParams, login, router]);
 
     return (

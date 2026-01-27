@@ -115,7 +115,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('user', JSON.stringify(userData));
 
         // Store token in cookie for middleware access (server-side)
-        document.cookie = `token=${newToken}; path=/; max-age=7200; SameSite=Lax`;
+        // SameSite=None; Secure is required for cross-origin OAuth on iOS (requires HTTPS)
+        const isProduction = window.location.protocol === 'https:';
+        const sameSite = isProduction ? 'None; Secure' : 'Lax';
+        document.cookie = `token=${newToken}; path=/; max-age=7200; SameSite=${sameSite}`;
+
 
         setUser(userData);
         setToken(newToken);
