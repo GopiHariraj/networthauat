@@ -9,7 +9,10 @@ import {
   Query,
   UseGuards,
   Request,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { TransactionsService } from './transactions.service';
 import {
   CreateTransactionDto,
@@ -36,6 +39,16 @@ export class TransactionsController {
   @Post('receipt')
   async analyzeReceipt(@Body() body: { image: string }, @Request() req: any) {
     return this.transactionsService.analyzeReceipt(req.user.id, body.image);
+  }
+
+  @Post('statement')
+  @UseInterceptors(FileInterceptor('file'))
+  async parseStatement(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('accountId') accountId: string,
+    @Request() req: any,
+  ) {
+    return this.transactionsService.parseStatement(req.user.id, file, accountId);
   }
 
   @Get()

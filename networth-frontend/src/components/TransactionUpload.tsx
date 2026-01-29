@@ -10,8 +10,10 @@ import { financialDataApi } from '../lib/api/financial-data';
 export default function TransactionUpload({ onTransactionAdded }: { onTransactionAdded: () => void }) {
     const { currency, convert } = useCurrency();
     const { data, refreshNetWorth } = useNetWorth();
-    const [activeTab, setActiveTab] = useState<'sms' | 'receipt' | 'manual'>('sms');
+    const [activeTab, setActiveTab] = useState<'sms' | 'receipt' | 'manual' | 'statement'>('sms');
+    const [selectedAccountId, setSelectedAccountId] = useState('');
     const [smsText, setSmsText] = useState('');
+
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -109,6 +111,31 @@ export default function TransactionUpload({ onTransactionAdded }: { onTransactio
         }
     };
 
+
+
+
+    const handleStatementUpload = async (file: File) => {
+        if (!file || !selectedAccountId) return;
+        setLoading(true);
+        try {
+            console.log('Uploading statement:', file.name, selectedAccountId);
+            const res = await transactionsApi.parseStatement(file, selectedAccountId);
+
+            if (res.data.success) {
+                setResult(res.data);
+                onTransactionAdded();
+                await refreshNetWorth();
+            } else {
+                alert(res.data.message || 'Failed to parse statement');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('Failed to upload/analyze statement.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const fileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -155,7 +182,7 @@ export default function TransactionUpload({ onTransactionAdded }: { onTransactio
                     <span className="p-2 bg-blue-50 dark:bg-blue-900/30 rounded-lg">🚀</span> Transaction Hub
                 </h3>
                 <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
-                    {(['sms', 'receipt', 'manual'] as const).map(tab => (
+                    {(['sms', 'receipt', 'manual', 'statement'] as const).map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -164,6 +191,7 @@ export default function TransactionUpload({ onTransactionAdded }: { onTransactio
                             {tab === 'sms' && '📱 AI SMS'}
                             {tab === 'receipt' && '📸 AI Receipt'}
                             {tab === 'manual' && '✍️ Manual'}
+                            {tab === 'statement' && '📄 Statement'}
                         </button>
                     ))}
                 </div>
@@ -303,6 +331,68 @@ Examples:
                             </button>
                         </div>
                     </form>
+                )}
+
+                {/* Statement Upload Tab */}
+                {activeTab === 'statement' && (
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 transition-colors text-center group animate-in fade-in slide-in-from-bottom-2">
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleStatementUpload(file);
+                            }}
+                            className="hidden"
+                            accept=".pdf,.csv,.xlsx,.xls"
+                        />
+
+                        {/* Bank Account Selection - Require before upload */}
+                        <div className="mb-6 max-w-sm mx-auto">
+                            <label className="block text-sm font-bold text-slate-500 mb-2">Select Bank Account (Required)</label>
+                            <select
+                                value={selectedAccountId}
+                                onChange={(e) => setSelectedAccountId(e.target.value)}
+                                className="w-full p-3 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 outline-none focus:border-blue-500 transition-all font-bold text-slate-800 dark:text-slate-200"
+                            >
+                                <option value="">-- Select Account --</option>
+                                {/* Fetch accounts from NetWorth Context */}
+                                {data?.assets?.cash?.bankAccounts?.map((acc: any) => (
+                                    <option key={acc.id} value={acc.id}>{acc.bankName} - {acc.accountName}</option>
+                                ))}
+                                {data?.assets?.cash?.wallets?.map((acc: any) => (
+                                    <option key={acc.id} value={acc.id}>Wallet - {acc.accountName}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div
+                            className={`cursor-pointer ${!selectedAccountId ? 'opacity-50 pointer-events-none' : ''}`}
+                            onClick={() => selectedAccountId && fileInputRef.current?.click()}
+                        >
+                            <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform">
+                                <span className="text-3xl">📄</span>
+                            </div>
+                            <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-1">Upload Statement</h3>
+                            <p className="text-sm text-slate-500 mb-4">Support for PDF, CSV, Excel</p>
+
+                            {!selectedAccountId && <p className="text-xs text-red-400 text-center font-bold">Please select a bank account first</p>}
+
+                            <button
+                                className="px-6 py-2 bg-blue-500 text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors disabled:opacity-50"
+                                disabled={!selectedAccountId}
+                            >
+                                Select File
+                            </button>
+                        </div>
+
+                        {loading && activeTab === 'statement' && (
+                            <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl flex items-center justify-center gap-3">
+                                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                                <span className="text-sm font-bold text-blue-600 dark:text-blue-400">Parsing statement... This may take a moment.</span>
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
 

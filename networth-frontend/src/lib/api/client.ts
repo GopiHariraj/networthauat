@@ -161,6 +161,14 @@ export const usersApi = {
 
 export const transactionsApi = {
     create: (data: any) => apiClient.post('/transactions', data),
+    parseStatement: (file: File, accountId: string) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (accountId) formData.append('accountId', accountId);
+        return apiClient.post('/transactions/statement', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+    },
     parseSMS: (text: string) => apiClient.post('/transactions/sms', { text }),
     analyzeReceipt: (image: string) => apiClient.post('/transactions/receipt', { image }),
     getAll: (accountId?: string) => {
